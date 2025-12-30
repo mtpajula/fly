@@ -97,6 +97,17 @@ class DroneAPI:
         self._require_master()
         return bool(self.master.motors_armed())
 
+    def get_mode(self) -> Optional[str]:
+        """Return the current flight mode name (e.g., 'GUIDED_NOGPS')."""
+        self._require_master()
+        if 'heartbeat' not in self.master.messages:
+            return None
+        msg = self.master.messages['heartbeat']
+        mode_id = msg.custom_mode
+        # This is a bit of a hack for ArduCopter; ideally we'd use a mapping
+        # but for this specific test we know what we are looking for.
+        return str(mode_id)
+
     def get_relative_alt(self, timeout=1.0) -> Optional[float]:
         self._require_master()
 

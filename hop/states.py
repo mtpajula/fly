@@ -64,12 +64,18 @@ class SetModeGuidedNogpsState(State):
 
     def step(self, ctx) -> State:
         if not self.mode_sent:
-            ctx.log("[FSM] Sending mode GUIDED_NOGPS")
+            ctx.log("[FSM] Sending mode GUIDED_NOGPS (mode_id=%d)", config.GUIDED_NOGPS_MODE)
             ctx.drone.set_mode_custom(config.GUIDED_NOGPS_MODE)
             self.mode_sent = True
             return self
 
+        current_mode = ctx.drone.get_mode()
+        if current_mode == str(config.GUIDED_NOGPS_MODE):
+            ctx.log("[FSM] Mode confirmed: %s", current_mode)
+            return ArmState()
+
         if ctx.elapsed >= config.MODE_CHANGE_WAIT:
+            ctx.log("[FSM] Mode change timeout (current=%s), proceeding anyway...", current_mode)
             return ArmState()
 
         return self
@@ -125,9 +131,9 @@ class SpinMotorsState(State):
     def on_enter(self, ctx) -> None:
         self.start = time.time()
         ctx.log("[FSM] Entering SPIN_MOTORS")
-        ctx.log(">> Props OFF. Motors will spin using RC throttle override.")
+        ctx.log(">> Props OFF. Motors will spin using SET_ATTITUDE_TARGET thrust.")
         ctx.log(
-            f"[FSM] Spin throttle={config.SPIN_THRUST_PERCENT:.1f}%, "
+            f"[FSM] Spin thrust={config.SPIN_THRUST:.2f}, "
             f"duration={config.SPIN_DURATION:.1f}s"
         )
         ctx.log(f"[FSM] is_armed at SPIN_MOTORS entry: {ctx.drone.is_armed()}")
@@ -139,8 +145,8 @@ class SpinMotorsState(State):
             ctx.drone.read_status_messages(duration=0.2)
             return self
 
-        # Armed: send throttle override at configured percent
-        ctx.drone.set_throttle_percent(config.SPIN_THRUST_PERCENT)
+        # Send SET_ATTITUDE_TARGET thrust
+        ctx.drone.set_thrust(config.SPIN_THRUST)
 
         # Optional: read any status text while spinning
         ctx.drone.read_status_messages(duration=0.05)
@@ -148,8 +154,8 @@ class SpinMotorsState(State):
         # Stop after configured duration
         if time.time() - self.start > config.SPIN_DURATION:
             ctx.log("[FSM] Spin test complete")
-            # Clear override by sending 0% (maps to 1000us) or just send no override
-            ctx.drone.set_throttle_percent(0.0)
+            # Clear thrust by sending 0
+            ctx.drone.set_thrust(0.0)
             return WaitForAscentState()
 
         return self
