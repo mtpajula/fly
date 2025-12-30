@@ -54,9 +54,14 @@ class StateMachine:
         Execute one FSM tick.
         Returns True to keep running, False when DONE/ABORT.
         """
-        # Update telemetry if state is active
+        # Update telemetry by draining the message buffer
+        self.drone.update()
+        
+        # Update context telemetry
+        self.ctx.alt = self.drone.get_relative_alt()
+
+        # Log altitude if state is active
         if not isinstance(self.state, (WaitHeartbeatState, DoneState, AbortState)):
-            self.ctx.alt = self.drone.get_relative_alt(timeout=0.5)
             if self.ctx.alt is not None:
                 self.log(f"[ALT] {self.ctx.alt:.3f} m")
 

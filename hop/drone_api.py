@@ -14,6 +14,7 @@ class DroneAPI:
         self.baud = baud or config.BAUD
         self.master = None
         self.log = setup_logger()
+        self.latest_msgs = {}
 
     def connect(self):
         self.log.info(f"Connecting to %s @ %d", self.port, self.baud)
@@ -22,6 +23,28 @@ class DroneAPI:
             baud=self.baud,
             autoreconnect=False,
         )
+
+    def update(self):
+        """Drain all waiting MAVLink messages and update local state."""
+        self._require_master()
+        while True:
+            msg = self.master.recv_match(blocking=False)
+            if msg is None:
+                break
+            
+            mtype = msg.get_type()
+            self.latest_msgs[mtype] = msg
+            
+            # Log important feedback immediately if not handled elsewhere
+            if mtype == "STATUSTEXT":
+                text = getattr(msg, "text", "")
+                self.log.info("[STATUSTEXT] %s: %s", msg.severity, text)
+            elif mtype == "COMMAND_ACK":
+                self.log.info(
+                    "[COMMAND_ACK] command=%s result=%s",
+                    getattr(msg, "command", "?"),
+                    getattr(msg, "result", "?"),
+                )
 
     def wait_heartbeat(self, timeout=None) -> bool:
         self._require_master()
@@ -98,32 +121,20 @@ class DroneAPI:
         return bool(self.master.motors_armed())
 
     def get_mode(self) -> Optional[str]:
-        """Return the current flight mode name (e.g., 'GUIDED_NOGPS')."""
+        """Return the current flight mode name (e.g., '20' for GUIDED_NOGPS)."""
         self._require_master()
-        if 'heartbeat' not in self.master.messages:
-            return None
-        msg = self.master.messages['heartbeat']
-        mode_id = msg.custom_mode
-        # This is a bit of a hack for ArduCopter; ideally we'd use a mapping
-        # but for this specific test we know what we are looking for.
-        return str(mode_id)
+        msg = self.latest_msgs.get('HEARTBEAT')
+        if msg:
+            return str(msg.custom_mode)
+        return None
 
-    def get_relative_alt(self, timeout=1.0) -> Optional[float]:
+    def get_relative_alt(self) -> Optional[float]:
+        """Return altitude from the latest GLOBAL_POSITION_INT message."""
         self._require_master()
-
-        msg = self.master.recv_match(type="GLOBAL_POSITION_INT", blocking=False)
-        while msg is not None:
-            msg = self.master.recv_match(type="GLOBAL_POSITION_INT", blocking=False)
-
-        msg = self.master.recv_match(
-            type="GLOBAL_POSITION_INT",
-            blocking=True,
-            timeout=timeout,
-        )
-        if msg is None:
-            return None
-
-        return msg.relative_alt * 0.001
+        msg = self.latest_msgs.get('GLOBAL_POSITION_INT')
+        if msg:
+            return msg.relative_alt * 0.001
+        return None
 
     def close(self):
         if self.master:

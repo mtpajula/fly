@@ -99,18 +99,12 @@ class ArmState(State):
             ctx.log("[FSM] Sending ARM command")
             ctx.drone.arm()
             self.arm_sent = True
-
-            # NEW: read whatever the FC says right after arm request
-            ctx.drone.read_status_messages(duration=1.0)
             return self
 
         # Poll armed flag each loop
         if ctx.drone.is_armed():
             ctx.log("[FSM] Vehicle reports ARMED")
             return SpinMotorsState()
-
-        # Also periodically read status while waiting
-        ctx.drone.read_status_messages(duration=0.1)
 
         if ctx.elapsed > config.ARMING_TIMEOUT:
             ctx.log("[FSM] Arming timeout -> ABORT")
@@ -142,14 +136,10 @@ class SpinMotorsState(State):
         # If not armed, we can't spin. Check + show why.
         if not ctx.drone.is_armed():
             ctx.log("[FSM] WARNING: Vehicle is NOT ARMED during SPIN_MOTORS")
-            ctx.drone.read_status_messages(duration=0.2)
             return self
 
         # Send SET_ATTITUDE_TARGET thrust
         ctx.drone.set_thrust(config.SPIN_THRUST)
-
-        # Optional: read any status text while spinning
-        ctx.drone.read_status_messages(duration=0.05)
 
         # Stop after configured duration
         if time.time() - self.start > config.SPIN_DURATION:
