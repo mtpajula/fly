@@ -20,7 +20,7 @@ DISARM_WAIT_TIME = 1.0     # seconds to listen for ACK / status after disarm
 
 # Motor spin test settings
 SPIN_THRUST = 0.30       # normalized thrust 0..1 (30% power)
-SPIN_THRUST_PERCENT = 35.0   # try 35% first; increase if needed (props OFF)
+SPIN_THRUST_PERCENT = 30.0   # 30% power (props OFF)
 SPIN_DURATION = 5.0      # seconds to run the spin test
 
 LOOP_DT = 0.1

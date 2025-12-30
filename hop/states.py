@@ -125,9 +125,9 @@ class SpinMotorsState(State):
     def on_enter(self, ctx) -> None:
         self.start = time.time()
         ctx.log("[FSM] Entering SPIN_MOTORS")
-        ctx.log(">> Props OFF. Motors will spin using SET_ATTITUDE_TARGET thrust.")
+        ctx.log(">> Props OFF. Motors will spin using RC throttle override.")
         ctx.log(
-            f"[FSM] Spin thrust={config.SPIN_THRUST:.2f}, "
+            f"[FSM] Spin throttle={config.SPIN_THRUST_PERCENT:.1f}%, "
             f"duration={config.SPIN_DURATION:.1f}s"
         )
         ctx.log(f"[FSM] is_armed at SPIN_MOTORS entry: {ctx.drone.is_armed()}")
@@ -138,14 +138,14 @@ class SpinMotorsState(State):
             ctx.log("[FSM] WARNING: Vehicle is NOT ARMED during SPIN_MOTORS")
             return self
 
-        # Send SET_ATTITUDE_TARGET thrust
-        ctx.drone.set_thrust(config.SPIN_THRUST)
+        # Send RC override throttle
+        ctx.drone.set_throttle_percent(config.SPIN_THRUST_PERCENT)
 
         # Stop after configured duration
         if time.time() - self.start > config.SPIN_DURATION:
             ctx.log("[FSM] Spin test complete")
-            # Clear thrust by sending 0
-            ctx.drone.set_thrust(0.0)
+            # Clear override by sending 0
+            ctx.drone.set_throttle_percent(0.0)
             return WaitForAscentState()
 
         return self

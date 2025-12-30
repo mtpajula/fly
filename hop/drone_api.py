@@ -118,6 +118,10 @@ class DroneAPI:
     def is_armed(self) -> bool:
         """Check whether vehicle reports motors armed."""
         self._require_master()
+        msg = self.latest_msgs.get('HEARTBEAT')
+        if msg:
+            return bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
+        # Fallback to pymavlink's internal tracking
         return bool(self.master.motors_armed())
 
     def get_mode(self) -> Optional[str]:
@@ -226,4 +230,30 @@ class DroneAPI:
             pwm,      # ch3 (throttle) - our override
             0,        # ch4 (yaw) - no override
             0, 0, 0, 0  # ch5-8 - no override
+        )
+
+    def run_motor_test(self, motor_index: int, percent: float, duration: float):
+        """
+        Run a motor test on a specific motor.
+        motor_index: 1-indexed motor number.
+        percent: 0-100 power.
+        duration: seconds.
+        """
+        self._require_master()
+        self.log.info("Running motor test: motor=%d, power=%.1f%%, duration=%.1f s", 
+                      motor_index, percent, duration)
+        
+        # Throttle type 0 = percentage
+        self.master.mav.command_long_send(
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_CMD_DO_MOTOR_TEST,
+            0,
+            motor_index,
+            0, # percentage
+            percent,
+            duration,
+            0, # motor_count (0=1 motor)
+            0, # test_order
+            0  # test_flags
         )
