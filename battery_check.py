@@ -1,58 +1,61 @@
 #!/usr/bin/env python3
 """
-Read Pixhawk battery status via MAVLink (ArduPilot).
-Shows:
- - Battery voltage (V)
- - Battery current (A)
- - Estimated remaining (%)
+Battery status via MAVSDK.
 
-Requires pymavlink + pyserial
+Example:
+  uv run battery_check.py --system-address udpin://0.0.0.0:14540 --count 20
 """
 
-from pymavlink import mavutil
 import argparse
-import sys
+import asyncio
 
-parser = argparse.ArgumentParser(description="Pixhawk battery monitor")
-parser.add_argument("--port", default="/dev/ttyS0", help="Serial device")
-parser.add_argument("--baud", type=int, default=57600, help="Baud rate")
-parser.add_argument("--count", type=int, default=20, help="Number of updates to print")
-args = parser.parse_args()
+from mavsdk import System
 
-print(f"Connecting to {args.port} @ {args.baud}...")
-try:
-    master = mavutil.mavlink_connection(args.port, baud=args.baud)
-except Exception as e:
-    print(f"[ERROR] Failed to open port: {e}")
-    sys.exit(1)
 
-print("Waiting for heartbeat...")
-hb = master.wait_heartbeat(timeout=10)
-if hb is None:
-    print("[ERROR] No heartbeat received")
-    sys.exit(1)
+async def main_async(system_address: str, count: int) -> None:
+    drone = System()
+    await drone.connect(system_address=system_address)
 
-print("Heartbeat OK — reading battery values\n")
+    async for state in drone.core.connection_state():
+        if state.is_connected:
+            print("Connected")
+            break
 
-count = 0
-while count < args.count:
-    msg = master.recv_match(type="SYS_STATUS", blocking=True, timeout=5)
-    if msg is None:
-        print("No battery data (timeout)")
-        continue
+    printed = 0
+    async for batt in drone.telemetry.battery():
+        voltage_v = getattr(batt, "voltage_v", None)
+        remaining_percent = getattr(batt, "remaining_percent", None)
 
-    voltage_mv = msg.voltage_battery     # millivolts
-    current_cA = msg.current_battery     # centi-amps
-    remaining = msg.battery_remaining    # percent (−1 if unknown)
+        parts: list[str] = []
+        if voltage_v is not None:
+            parts.append(f"Voltage: {voltage_v:.2f} V")
+        if remaining_percent is not None:
+            parts.append(f"Remaining: {remaining_percent * 100:.0f}%")
 
-    voltage_v = voltage_mv / 1000.0
-    current_a = current_cA / 100.0 if current_cA != -1 else None
+        if not parts:
+            print("Battery: <no data>")
+        else:
+            print(" | ".join(parts))
 
-    out = f"Voltage: {voltage_v:.2f} V"
-    if current_a is not None:
-        out += f" | Current: {current_a:.2f} A"
-    if remaining != -1:
-        out += f" | Remaining: {remaining}%"
+        printed += 1
+        if printed >= count:
+            break
 
-    print(out)
-    count += 1
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Battery monitor via MAVSDK")
+    parser.add_argument(
+        "--system-address",
+        default="udpin://0.0.0.0:14540",
+        help='MAVSDK system address (e.g. "udp://:14540", "udpin://0.0.0.0:14540", "serial:///dev/ttyS0:57600")',
+    )
+    parser.add_argument("--count", type=int, default=20, help="Number of updates to print")
+    args = parser.parse_args()
+
+    asyncio.run(main_async(system_address=args.system_address, count=args.count))
+
+
+if __name__ == "__main__":
+    main()
+
+

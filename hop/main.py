@@ -1,47 +1,50 @@
-# first_hop/main.py
+import argparse
+import asyncio
 
-import time
-
-from . import config
-from .drone_api import DroneAPI
-from .state_machine import StateMachine
-from .states import DoneState, AbortState
-from .logger_setup import setup_logger
+from mavsdk import System
 
 
-def main():
-    log = setup_logger()
+async def hop(system_address: str, hover_seconds: float) -> None:
+    drone = System()
+    await drone.connect(system_address=system_address)
 
-    log.info("FIRST HOP TEST – manual lift, state machine")
-    log.info("Props OFF for initial testing")
-    log.info("Using port=%s baud=%d", config.PORT, config.BAUD)
+    async for state in drone.core.connection_state():
+        if state.is_connected:
+            print("Connected")
+            break
 
-    drone = DroneAPI()
-    fsm = None
+    async for health in drone.telemetry.health():
+        if health.is_global_position_ok and health.is_home_position_ok:
+            print("Ready")
+            break
 
-    try:
-        drone.connect()
-        fsm = StateMachine(drone=drone)
+    await drone.action.arm()
+    await drone.action.takeoff()
 
-        running = True
-        while running:
-            running = fsm.step()
-            time.sleep(config.LOOP_DT)
+    await asyncio.sleep(hover_seconds)
 
-        if isinstance(fsm.current_state, DoneState):
-            log.info("Test completed successfully")
-        elif isinstance(fsm.current_state, AbortState):
-            log.warning("Test aborted")
-        else:
-            log.warning("FSM ended unexpectedly: %s", fsm.current_state.name)
+    await drone.action.land()
 
-    except KeyboardInterrupt:
-        log.warning("Interrupted by user")
-    except Exception as e:
-        log.exception("Unhandled exception: %s", e)
-    finally:
-        drone.close()
-        log.info("Exit")
+    async for in_air in drone.telemetry.in_air():
+        if not in_air:
+            break
+
+    await drone.action.disarm()
+    print("Done")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Simple MAVSDK hop: arm, takeoff, wait, land, disarm.")
+    parser.add_argument(
+        "--system-address",
+        default="udpin://0.0.0.0:14540",
+        help='MAVSDK system address (e.g. "udp://:14540", "udpin://0.0.0.0:14540", "serial:///dev/ttyS0:57600")',
+    )
+    parser.add_argument("--hover-seconds", type=float, default=5.0, help="Seconds to wait after takeoff before landing")
+    args = parser.parse_args()
+
+    asyncio.run(hop(system_address=args.system_address, hover_seconds=args.hover_seconds))
+
 
 if __name__ == "__main__":
     main()
