@@ -30,10 +30,13 @@ async def main_async(system_address: str, samples: int) -> None:
     # Best-effort: some stacks/links may not provide everything.
     try:
         version = await drone.info.get_version()
+        vendor = getattr(version, "vendor_version", None)
+        if vendor is None:
+            vendor = getattr(version, "vendor_id", None)
         print(
             "Autopilot: "
             f"{version.flight_sw_major}.{version.flight_sw_minor}.{version.flight_sw_patch} "
-            f"(vendor={version.vendor_version})"
+            + (f"(vendor={vendor})" if vendor is not None else "")
         )
     except Exception as e:
         print(f"Info/version not available: {e}")
