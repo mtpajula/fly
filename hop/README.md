@@ -26,4 +26,12 @@ Or serial (example):
 uv run -m hop.main --system-address serial:///dev/ttyS0:57600
 ```
 
+### Indoors tip
+
+Default takeoff altitude is **0.5m**. You can set it lower/higher (clamped to >= 0.3m):
+
+```bash
+uv run -m hop.main --takeoff-alt-m 0.5
+```
+
 

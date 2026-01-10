@@ -48,7 +48,17 @@ async def _print_health_once(drone: System) -> None:
         return
 
 
-async def hop(system_address: str, hover_seconds: float) -> None:
+async def _wait_until_in_air(drone: System, timeout_s: float) -> bool:
+    """Return True once telemetry reports in_air=True, else False on timeout."""
+    start = asyncio.get_event_loop().time()
+    async for in_air in drone.telemetry.in_air():
+        if in_air:
+            return True
+        if asyncio.get_event_loop().time() - start >= timeout_s:
+            return False
+
+
+async def hop(system_address: str, hover_seconds: float, takeoff_alt_m: float) -> None:
     drone = System()
     await drone.connect(system_address=system_address)
 
@@ -67,6 +77,14 @@ async def hop(system_address: str, hover_seconds: float) -> None:
 
     await _print_health_once(drone)
 
+    # Indoors: set a low takeoff altitude explicitly (PX4 otherwise uses its own default).
+    takeoff_alt_m = max(0.3, float(takeoff_alt_m))
+    try:
+        await drone.action.set_takeoff_altitude(takeoff_alt_m)
+        print(f"[INFO] Takeoff altitude set to {takeoff_alt_m:.2f} m")
+    except Exception as e:
+        print(f"[WARN] Failed to set takeoff altitude ({takeoff_alt_m:.2f} m): {e}")
+
     try:
         await drone.action.arm()
     except ActionError as e:
@@ -84,6 +102,19 @@ async def hop(system_address: str, hover_seconds: float) -> None:
         raise
 
     await drone.action.takeoff()
+
+    # Don't start the hover timer until PX4 actually considers the vehicle airborne.
+    in_air = await _wait_until_in_air(drone, timeout_s=10.0)
+    if not in_air:
+        print("[ERROR] takeoff() sent, but vehicle never became 'in_air' within 10s.")
+        print("[HINT] Indoors this is commonly thrust/props/motor-direction or land-detector tuning.")
+        try:
+            await drone.action.disarm()
+        except Exception:
+            pass
+        stop_status.set()
+        await status_task
+        return
 
     await asyncio.sleep(hover_seconds)
 
@@ -107,9 +138,21 @@ def main() -> None:
         help='MAVSDK system address (e.g. "udp://:14540", "udpin://0.0.0.0:14540", "serial:///dev/ttyS0:57600")',
     )
     parser.add_argument("--hover-seconds", type=float, default=5.0, help="Seconds to wait after takeoff before landing")
+    parser.add_argument(
+        "--takeoff-alt-m",
+        type=float,
+        default=0.5,
+        help="Takeoff altitude in meters (indoors default: 0.5m). Will be clamped to >= 0.3m.",
+    )
     args = parser.parse_args()
 
-    asyncio.run(hop(system_address=args.system_address, hover_seconds=args.hover_seconds))
+    asyncio.run(
+        hop(
+            system_address=args.system_address,
+            hover_seconds=args.hover_seconds,
+            takeoff_alt_m=args.takeoff_alt_m,
+        )
+    )
 
 
 if __name__ == "__main__":
