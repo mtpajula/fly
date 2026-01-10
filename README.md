@@ -11,15 +11,15 @@ Minimal MAVSDK-based scripts for PX4 (and generally MAVSDK-compatible stacks).
 ### Run (examples)
 
 ```bash
-uv run -m hop.main --system-address udpin://0.0.0.0:14540 --hover-seconds 5
+uv run -m hop.main --hover-seconds 5
 ```
 
 ```bash
-uv run pixhawk_link_test.py --system-address udpin://0.0.0.0:14540 --samples 20
+uv run pixhawk_link_test.py --samples 20
 ```
 
 ```bash
-uv run battery_check.py --system-address udpin://0.0.0.0:14540 --count 20
+uv run battery_check.py --count 20
 ```
 
 

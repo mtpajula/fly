@@ -17,7 +17,7 @@ This folder contains a minimal **MAVSDK**-based “hop” example:
 From repo root:
 
 ```bash
-uv run -m hop.main --system-address udpin://0.0.0.0:14540 --hover-seconds 5
+uv run -m hop.main --hover-seconds 5
 ```
 
 Or serial (example):

@@ -61,7 +61,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="MAVSDK link test")
     parser.add_argument(
         "--system-address",
-        default="udpin://0.0.0.0:14540",
+        default="serial:///dev/ttyS0:57600",
         help='MAVSDK system address (e.g. "udp://:14540", "udpin://0.0.0.0:14540", "serial:///dev/ttyS0:57600")',
     )
     parser.add_argument("--samples", type=int, default=20, help="Number of telemetry samples to print")
