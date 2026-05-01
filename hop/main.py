@@ -9,7 +9,7 @@ except Exception:  # pragma: no cover
 
 
 async def _print_status_text(drone: System, stop: asyncio.Event) -> None:
-    """Print STATUSTEXT messages (PX4 prearm/arming-check hints show up here)."""
+    """Print STATUSTEXT messages (ArduPilot prearm/arming-check hints show up here)."""
     try:
         async for st in drone.telemetry.status_text():
             if stop.is_set():
@@ -50,11 +50,11 @@ async def _print_health_once(drone: System) -> None:
 
 async def _wait_until_in_air(drone: System, timeout_s: float) -> bool:
     """Return True once telemetry reports in_air=True, else False on timeout."""
-    start = asyncio.get_event_loop().time()
+    start = asyncio.get_running_loop().time()
     async for in_air in drone.telemetry.in_air():
         if in_air:
             return True
-        if asyncio.get_event_loop().time() - start >= timeout_s:
+        if asyncio.get_running_loop().time() - start >= timeout_s:
             return False
 
 
@@ -77,23 +77,26 @@ async def hop(system_address: str, hover_seconds: float, takeoff_alt_m: float) -
 
     await _print_health_once(drone)
 
-    # Indoors: set a low takeoff altitude explicitly (PX4 otherwise uses its own default).
+    # Indoors: set a low takeoff altitude explicitly (ArduPilot uses PILOT_TAKEOFF_ALT (cm)).
     takeoff_alt_m = max(0.3, float(takeoff_alt_m))
     try:
-        await drone.action.set_takeoff_altitude(takeoff_alt_m)
-        print(f"[INFO] Takeoff altitude set to {takeoff_alt_m:.2f} m")
+        await drone.param.set_param_float("PILOT_TAKEOFF_ALT", takeoff_alt_m * 100)
+        print(f"[INFO] Takeoff altitude set to {takeoff_alt_m:.2f} m (PILOT_TAKEOFF_ALT={int(takeoff_alt_m * 100)} cm)")
     except Exception as e:
-        print(f"[WARN] Failed to set takeoff altitude ({takeoff_alt_m:.2f} m): {e}")
+        print(f"[WARN] Failed to set PILOT_TAKEOFF_ALT: {e}")
 
     try:
         await drone.action.arm()
     except ActionError as e:
         print(f"[ERROR] arm() failed: {e}")
         print(
-            "[HINT] PX4 denied arming. Common causes:\n"
-            "- Safety switch still ON (press safety button / disable safety)\n"
-            "- Prearm checks failing (watch [STATUSTEXT] lines above for the exact reason)\n"
-            "- RC requirements / arming checks / EKF not ready"
+            "[HINT] ArduPilot denied arming. Common causes:\n"
+            "- EKF not ready / GPS not locked\n"
+            "- Compass not calibrated / compass variance\n"
+            "- RC not calibrated / RC failsafe\n"
+            "- AHRS not healthy\n"
+            "- Must be in GUIDED mode for programmatic arm+takeoff\n"
+            "- Prearm checks failing (watch [STATUSTEXT] lines above for the exact reason)"
         )
         # Give status_text a moment to flush any last prearm messages
         await asyncio.sleep(2.0)
@@ -103,7 +106,7 @@ async def hop(system_address: str, hover_seconds: float, takeoff_alt_m: float) -
 
     await drone.action.takeoff()
 
-    # Don't start the hover timer until PX4 actually considers the vehicle airborne.
+    # Don't start the hover timer until ArduPilot actually considers the vehicle airborne.
     in_air = await _wait_until_in_air(drone, timeout_s=10.0)
     if not in_air:
         print("[ERROR] takeoff() sent, but vehicle never became 'in_air' within 10s.")

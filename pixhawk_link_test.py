@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MAVSDK link test (PX4-friendly).
+MAVSDK link test (works with ArduPilot/PX4).
 
 What it does:
 - Connects to the vehicle
